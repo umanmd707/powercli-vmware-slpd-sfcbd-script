@@ -2,15 +2,12 @@ Import-Module VMware.VimAutomation.Core
 Import-Module PoSH-SSH
 
 $vcenter = Read-Host " Enter FQDN Or IP address of the vcenter"
-
 $UserName = Read-Host "Enter vCenter Username"
-
 $VCCred = Get-Credential -UserName $UserName -Message "Please enter Password of SSO Credentials"
 
 $VCConnection = Connect-VIServer -Server $vcenter -Credential $VCCred | Out-Null
 
 $Date = (Get-Date).tostring("dd-MM-yyyy-hh-mm-ss")
-
 $ResultFile = "C:\temp\Output-$vcenter-$Date.csv"
 
 $VMSAServiceStatus = @()
@@ -33,33 +30,30 @@ $cmd2 = '/etc/init.d/sfcbd-watchdog status'
 $secPswd = ConvertTo-SecureString 'xxxxxxx' -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential ('root', $secPswd)
 
-Get-Cluster -Name "atllabpoda" | Get-VMHost -PipelineVariable esx |
+Get-Cluster -Name "xxxxxxx" | Get-VMHost -PipelineVariable esx |
     ForEach-Object -Process {
 
         $ServiceStatus = @()
         $ServiceStatus = new-object PSObject
-
         $ServiceStatus | add-member -type NoteProperty -Name HostName -Value esx
 
         Get-VMHostService -VMHost $esx | where { $_.Key -eq 'TSM-SSH' } | Start-VMHostService -Confirm:$false | Out-Null
 
         $session = New-SSHSession -ComputerName $esx.Name -Credential $cred –AcceptKey
+        
         Write-Host "$esx status:"
-
         $slpdServiceState = Invoke-SSHCommand -SSHSession $session -Command $cmd1 | select -ExpandProperty Output
         $ServiceStatus | add-member -type NoteProperty -Name slpd_CurrentStatus -Value $slpdServiceState
         
-        $session = New-SSHSession -ComputerName $esx.Name -Credential $cred –AcceptKey
         $sfcbdServiceState = Invoke-SSHCommand -SSHSession $session -Command $cmd2 | select -ExpandProperty Output
-        
         $ServiceStatus | add-member -type NoteProperty -Name sfcbd_CurrentStatus -Value $sfcbdServiceState
+        
         Remove-SSHSession -SSHSession $session | Out-Null
-
+        
         Get-VMHostService -VMHost $esx | where { $_.Key -eq 'TSM-SSH' } | Stop-VMHostService -Confirm:$false | Out-Null
         
         $VMSAServiceStatus += $ServiceStatus
     }
 
   $VMSAServiceStatus | export-csv -Path $ResultFile -notype
-  
   Write-Host "Please check the final result file - $ResultFile"
